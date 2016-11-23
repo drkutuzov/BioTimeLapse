@@ -6,13 +6,52 @@ import pandas as pd
 import numpy as np
 import pylab as plt
 
+params = ['mean', 'auc_plus', 'max_value', 'max_time', 'max_time_to_peak', 'max_time_to_peak_from_root',
+                'auc_minus', 'min_value', 'min_time', 'min_time_to_peak', 'min_time_to_peak_from_root']
 
 class TimeSeries(object):
     """ Class for analyzing time series data
     
     Settings parameters:
     --------------------
-    
+    t_start : float,
+        start time of an analysis region [sec]
+        
+    t_end : float,
+        end time of an analysis region [sec]
+        
+    baseline_start : float,
+        start time of a baseline region [sec]
+        
+    baseline_end : 
+        end time of a baseline region [sec]
+        
+    clip_start : float,
+        start time of a discarded region [sec]
+        
+    clip_end : float,
+        end time of a discarded region [sec]
+        
+    smooth_poly : int,
+        the power of a local polynomial, used for smoothing data
+        
+    smooth_width : int (odd integer),
+        the width of a smoothing filter window used -- higher the value -- stronger the smoothing more detail on the filter and parameters here --- https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.signal.savgol_filter.html
+        
+    normalization : str,
+        'percent' (% of baseline), 'std' (y-value is expressed in the units of the std of a baseline)
+        
+    clip_interpolate : bool,
+        'False' (no interpolation for the clipped region) or any integer (0, 1, 2 ...) which uses polynomial to approximate the data in the clipped region
+        
+    intensity_threshold : float,
+        if value of the absolute maximum of a signal (between certain roots) is bigger than intensity_threshold, the parameters are calculated, [% of a baseline]
+        
+    duration_threshold : float,
+        if the duration of an inter-root interval is longer than duration_threshold, the parameters are calculated [sec]
+        
+    first_root_init : bool,
+        If True, t_start is used as a first root
     
     """
     def __init__(self, data, settings={}, roots=None, labels=None):
@@ -26,9 +65,10 @@ class TimeSeries(object):
                             index=self._t)
         self._clip()
         self.roots = self._find_roots() if roots is None else roots
+        if self.settings['first_root_init']:
+            self.roots.add(self.settings['t_start'])
         self._calculate_results()
         self.labels = self._get_interval_labels() if labels is None else labels
-    
     
     def _init_settings(self, settings):
         return {
@@ -44,6 +84,7 @@ class TimeSeries(object):
             'clip_interpolate' : settings.get('clip_interpolate', False),
             'intensity_threshold' : settings.get('intensity_threshold', 5.),
             'duration_threshold' : settings.get('duration_threshold', 10),
+            'first_root_init' : settings.get('first_root_init', False)
                 }
     
     @property
@@ -152,8 +193,12 @@ class TimeSeries(object):
                     self._results[extrema_type+'_time'].append(f[0](y))
                     self._results[extrema_type+'_value'].append(f[1](y))
                     self._results[extrema_type+'_time_to_peak'].append(self._results[extrema_type+'_time'][-1] - self.settings['t_start'])
-                    self._results[extrema_type+'_time_to_peak_from_root'].append(self._results[extrema_type+'_time'][-1] - t1)
-    
+                    self._results[extrema_type+'_time_to_peak_from_root'].append(self._results[extrema_type+'_time'][-1] - t1)   
+            else: 
+                for k in params:
+                    self._results[k].append(np.nan)
+                
+            
     def get_results(self):
         """ Outputs results as an excel-like table (pandas.DataFrame)
         
@@ -161,11 +206,10 @@ class TimeSeries(object):
         --------
         y.get_results(); y -- instance of the TimeSeries class 
         """
-        params_names = ['mean', 'auc_plus', 'max_value', 'max_time', 'max_time_to_peak', 'max_time_to_peak_from_root',
-                'auc_minus', 'min_value', 'min_time', 'min_time_to_peak', 'min_time_to_peak_from_root']
+        
         times = ['{0:.1f} to {1:.1f} sec'.format(t1, t2) for t1, t2 in self._root_zip]
-        indexes = [(i, j, k) for i, j in zip(self.labels, times) for k in params_names]
-        return pd.DataFrame(data=np.vstack([self._results[i] for i in params_names]).T.ravel(), 
+        indexes = [(i, j, k) for i, j in zip(self.labels, times) for k in params]
+        return pd.DataFrame(data=np.vstack([self._results[i] for i in params]).T.ravel(), 
                             index=pd.MultiIndex.from_tuples(indexes, names=['label', 'time', 'parameter']), 
                             columns=(self.name + ' (' + self.roi_type + ')',))
     
@@ -233,7 +277,7 @@ def analyze_table(table, settings, roots, labels, filename):
     for i in table:
         y = TimeSeries(table[i], settings=settings, roots=roots, labels=labels)
         y.plot()
-        plt.savefig(filename + y.name + '.pdf')
+        plt.savefig(filename + '_' + y.name + '.pdf')
         result_percent.append(y.get_results())
     
     settings['normalization'] = 'std'
