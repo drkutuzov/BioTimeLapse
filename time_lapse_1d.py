@@ -10,8 +10,10 @@ import pylab as plt
 class TimeSeries(object):
     """ Class for analyzing time series data
     
-    To create an instance of a class:
-    >>> y = TimeSeries(my_data, settings=my_settings, roots=my_roots, labels=my_labels)
+    Settings parameters:
+    --------------------
+    
+    
     """
     def __init__(self, data, settings={}, roots=None, labels=None):
         self.roi_type = data.iloc[0]
@@ -103,6 +105,7 @@ class TimeSeries(object):
         """
         del self.roots[index]
         self._calculate_results()
+        self.labels = self._get_interval_labels()
     
     def add_root(self, root):
         """ Adds new root and updates results
@@ -122,6 +125,7 @@ class TimeSeries(object):
             'New root value cannot be within the clipped data interval'
         self.roots.add(root)
         self._calculate_results()
+        self.labels = self._get_interval_labels()
         
     def _get_interval_labels(self):
         return ['dilation' if abs(y_max-self.baseline_mean) > abs(y_min-self.baseline_mean) else 'constriction' \
