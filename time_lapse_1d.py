@@ -40,7 +40,8 @@ class TimeSeries(object):
             'smooth_width' : settings.get('smooth_width', 5),
             'smooth_order' : settings.get('smooth_order', 0),
             'clip_interpolate' : settings.get('clip_interpolate', False),
-            'signal_threshold' : settings.get('signal_threshold', 5.)
+            'intensity_threshold' : settings.get('intensity_threshold', 5.),
+            'duration_threshold' : settings.get('duration_threshold', 10),
                 }
     
     @property
@@ -64,8 +65,8 @@ class TimeSeries(object):
     def _sel(self, t_start, t_end):
         return self._y.loc[slice(t_start, t_end)]
 
-    def _check_roots(self):
-        assert len(self.roots) >= 2, 'At least 2 roots should be initialized. Use an "add_root" method'
+#    def _check_roots(self):
+#        assert len(self.roots) >= 2, 'At least 2 roots should be initialized. Use an "add_root" method'
         
     def _clip(self):
         if self.settings['clip_start'] & self.settings['clip_end']:
@@ -132,25 +133,22 @@ class TimeSeries(object):
         d = np.sign(self._sel(self.settings['t_start'], self.settings['t_end']) - self.baseline_mean).diff()
         return SortedSet(np.mean(d.index[i-1:i+1]) for i in np.arange(0, len(d)) 
                            if np.isfinite(d.iloc[i]) & (d.iloc[i] != 0))    
-    
-    # def _check_roots(self):
         
-    
     def _calculate_results(self):
         self._results = defaultdict(list)
         funcs = dict(max=(np.argmax, np.max), min=(np.argmin, np.min))
         for t1, t2 in self._root_zip:
             y = self._sel(t1, t2)
-            self._results['mean'].append(np.mean(y))
-            area_plus, area_minus = self._area_under_curve(t1, t2)
-            self._results['auc_plus'].append(area_plus)
-            self._results['auc_minus'].append(area_minus)
-            for extrema_type, f in funcs.iteritems():
-                self._results[extrema_type+'_time'].append(f[0](y))
-                self._results[extrema_type+'_value'].append(f[1](y))
-                self._results[extrema_type+'_time_to_peak'].append(self._results[extrema_type+'_time'][-1] - self.settings['t_start'])
-                self._results[extrema_type+'_time_to_peak_from_root'].append(self._results[extrema_type+'_time'][-1] - t1)
-    
+            if (t2 - t1 >= self.settings['duration_threshold']) & (max(abs(y)) >= self.settings['intensity_threshold']): 
+                self._results['mean'].append(np.mean(y))
+                area_plus, area_minus = self._area_under_curve(t1, t2)
+                self._results['auc_plus'].append(area_plus)
+                self._results['auc_minus'].append(area_minus)
+                for extrema_type, f in funcs.iteritems():
+                    self._results[extrema_type+'_time'].append(f[0](y))
+                    self._results[extrema_type+'_value'].append(f[1](y))
+                    self._results[extrema_type+'_time_to_peak'].append(self._results[extrema_type+'_time'][-1] - self.settings['t_start'])
+                    self._results[extrema_type+'_time_to_peak_from_root'].append(self._results[extrema_type+'_time'][-1] - t1)
     
     def get_results(self):
         """ Outputs results as an excel-like table (pandas.DataFrame)
@@ -231,7 +229,7 @@ def analyze_table(table, settings, roots, labels, filename):
     for i in table:
         y = TimeSeries(table[i], settings=settings, roots=roots, labels=labels)
         y.plot()
-        plt.savefig(folder_path + y.name + '.pdf')
+        plt.savefig(filename + y.name + '.pdf')
         result_percent.append(y.get_results())
     
     settings['normalization'] = 'std'
