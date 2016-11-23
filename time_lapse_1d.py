@@ -40,6 +40,7 @@ class TimeSeries(object):
             'smooth_width' : settings.get('smooth_width', 5),
             'smooth_order' : settings.get('smooth_order', 0),
             'clip_interpolate' : settings.get('clip_interpolate', False),
+            'signal_threshold' : settings.get('signal_threshold', 5.)
                 }
     
     @property
@@ -74,7 +75,7 @@ class TimeSeries(object):
             
     def _normalize(self, method='percent'):
         assert method in ('percent', 'std'), 'Method can take values "percent" or "std"'
-        self._y = 100 * (self._y / self.baseline_mean if method - 1) == 'percent' \
+        self._y = 100 * (self._y / self.baseline_mean - 1) if method == 'percent' \
             else (self._y - self.baseline_mean) / self.baseline_std
     
     def _area_under_curve(self, t1, t2):
@@ -82,6 +83,8 @@ class TimeSeries(object):
         t = y.index - y.index[0]
         if y.isnull().values.any():
             return 'clipped', 'clipped'
+        elif len(y) <= 1:
+            return 'few data points', 'few data points'
         return auc(t, y.where(y>=0).fillna(0)), auc(t, abs(y.where(y<0).fillna(0)))
         
     def del_root(self, index):
@@ -128,7 +131,10 @@ class TimeSeries(object):
         """
         d = np.sign(self._sel(self.settings['t_start'], self.settings['t_end']) - self.baseline_mean).diff()
         return SortedSet(np.mean(d.index[i-1:i+1]) for i in np.arange(0, len(d)) 
-                           if np.isfinite(d.iloc[i]) & (d.iloc[i] != 0))        
+                           if np.isfinite(d.iloc[i]) & (d.iloc[i] != 0))    
+    
+    # def _check_roots(self):
+        
     
     def _calculate_results(self):
         self._results = defaultdict(list)
