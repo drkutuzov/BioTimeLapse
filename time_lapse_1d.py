@@ -16,43 +16,59 @@ class TimeSeries(object):
     --------------------
     t_start : float,
         start time of an analysis region [sec]
+        default: first time point
         
     t_end : float,
         end time of an analysis region [sec]
+        default: last time point
         
     baseline_start : float,
         start time of a baseline region [sec]
+        default: first time point
         
     baseline_end : 
         end time of a baseline region [sec]
+        default: last time point
         
     clip_start : float,
         start time of a discarded region [sec]
+        default: False, no clip
         
     clip_end : float,
         end time of a discarded region [sec]
+        default: False, no clip
         
-    smooth_poly : int,
+    smooth_order : int,
         the power of a local polynomial, used for smoothing data
+        default: 0.
         
     smooth_width : int (odd integer),
         the width of a smoothing filter window used -- higher the value -- stronger the smoothing more detail on the filter and parameters here --- https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.signal.savgol_filter.html
+        default: 5.
         
     normalization : str,
         'percent' (% of baseline), 'std' (y-value is expressed in the units of the std of a baseline)
+        default: 'percent'
         
     clip_interpolate : bool,
         'False' (no interpolation for the clipped region) or any integer (0, 1, 2 ...) which uses polynomial to approximate the data in the clipped region
+        default: False, no interpolation
         
     intensity_threshold : float,
         if value of the absolute maximum of a signal (between certain roots) is bigger than intensity_threshold, the parameters are calculated, [% of a baseline]
+        default: 5.0% 
         
     duration_threshold : float,
         if the duration of an inter-root interval is longer than duration_threshold, the parameters are calculated [sec]
+        default: 10 sec
         
     first_root_init : bool,
         If True, t_start is used as a first root
-    
+        default: True
+        
+    last_root_init : bool,
+        If True, t_end is used as a last root
+        default: True
     """
     def __init__(self, data, settings={}, roots=None, labels=None):
         self.roi_type = data.iloc[0]
@@ -67,10 +83,13 @@ class TimeSeries(object):
         self.roots = self._find_roots() if roots is None else roots
         if self.settings['first_root_init']:
             self.roots.add(self.settings['t_start'])
+        if self.settings['last_root_init']:
+            self.roots.add(self.settings['t_end'])
         self._calculate_results()
         self.labels = self._get_interval_labels() if labels is None else labels
     
     def _init_settings(self, settings):
+        
         return {
             't_start' : settings.get('t_start', self._t[0]),
             't_end' : settings.get('t_end', self._t[-1]),
@@ -83,8 +102,9 @@ class TimeSeries(object):
             'smooth_order' : settings.get('smooth_order', 0),
             'clip_interpolate' : settings.get('clip_interpolate', False),
             'intensity_threshold' : settings.get('intensity_threshold', 5.),
-            'duration_threshold' : settings.get('duration_threshold', 10),
-            'first_root_init' : settings.get('first_root_init', False)
+            'duration_threshold' : settings.get('duration_threshold', 10.),
+            'first_root_init' : settings.get('first_root_init', True),
+            'last_root_init' : settings.get('last_root_init', True),
                 }
     
     @property
