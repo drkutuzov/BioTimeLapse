@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import pylab as plt
 
-params = ['mean', 'auc_plus', 'max_value', 'max_time', 'max_time_to_peak', 'max_time_to_peak_from_root',
+Params = ['mean', 'auc_plus', 'max_value', 'max_time', 'max_time_to_peak', 'max_time_to_peak_from_root',
                 'auc_minus', 'min_value', 'min_time', 'min_time_to_peak', 'min_time_to_peak_from_root']
 
 class TimeSeries(object):
@@ -70,12 +70,13 @@ class TimeSeries(object):
         If True, t_end is used as a last root
         default: True
     """
+    
     def __init__(self, data, settings={}, roots=None, labels=None):
         self.roi_type = data.iloc[0]
         self.name = data.name
         self._y = data.iloc[1:].copy()
         self._t = self._y.index
-        self.settings = self._init_settings(settings)
+        self._init_settings(settings)
         self._normalize(self.settings['normalization'])
         self._y = pd.Series(savgol_filter(self._y, self.settings['smooth_width'], self.settings['smooth_order']), 
                             index=self._t)
@@ -90,26 +91,29 @@ class TimeSeries(object):
     
     def _init_settings(self, settings):
         
-        return {
-            't_start' : settings.get('t_start', self._t[0]),
-            't_end' : settings.get('t_end', self._t[-1]),
-            'baseline_start' :  settings.get('baseline_start', self._t[0]),
-            'baseline_end' : settings.get('baseline_end', self._t[-1]),
-            'clip_start' : settings.get('clip_start', False),
-            'clip_end' : settings.get('clip_end', False),
-            'normalization' : settings.get('normalization', 'percent'),
-            'smooth_width' : settings.get('smooth_width', 5),
-            'smooth_order' : settings.get('smooth_order', 0),
-            'clip_interpolate' : settings.get('clip_interpolate', False),
-            'intensity_threshold' : settings.get('intensity_threshold', 5.),
-            'duration_threshold' : settings.get('duration_threshold', 10.),
-            'first_root_init' : settings.get('first_root_init', True),
-            'last_root_init' : settings.get('last_root_init', True),
-                }
-    
-    @property
-    def _root_zip(self):
-        return zip(self.roots[:-1], self.roots[1:])
+        defaults = {
+                    't_start' : self._t[0],
+                    't_end' : self._t[-1],
+                    'baseline_start' : self._t[0],
+                    'baseline_end' : self._t[-1],
+                    'clip_start' : False,
+                    'clip_end' : False,
+                    'normalization' : 'percent',
+                    'smooth_width' : 5,
+                    'smooth_order' : 0,
+                    'clip_interpolate' : False,
+                    'intensity_threshold' : 5.,
+                    'duration_threshold' : 10.,
+                    'first_root_init' : True,
+                    'last_root_init' : True,
+                    }
+        
+        result = dict(defaults)
+        for k, v in settings.iteritems():
+            if k not in result:
+                raise Exception('Unknown settings option {}, available options are:\n'.format(k) + '\n'.join(defaults.keys()))
+            result[k] = v                      
+        self.settings = result
     
     @property
     def baseline_mean(self):
@@ -127,9 +131,9 @@ class TimeSeries(object):
     
     def _sel(self, t_start, t_end):
         return self._y.loc[slice(t_start, t_end)]
-
-#    def _check_roots(self):
-#        assert len(self.roots) >= 2, 'At least 2 roots should be initialized. Use an "add_root" method'
+    
+    def _zip_roots(self):
+        return zip(self.roots[:-1], self.roots[1:])
         
     def _clip(self):
         if self.settings['clip_start'] & self.settings['clip_end']:
@@ -138,7 +142,8 @@ class TimeSeries(object):
                 self._y.interpolate(method='polynomial', order=self.settings['clip_interpolate'], inplace=True)
             
     def _normalize(self, method='percent'):
-        assert method in ('percent', 'std'), 'Method can take values "percent" or "std"'
+        if method not in ['percent', 'std']:
+            raise Exception('normalization parameter can be either "percent" or "std"')
         self._y = 100 * (self._y / self.baseline_mean - 1) if method == 'percent' \
             else (self._y - self.baseline_mean) / self.baseline_std
     
@@ -173,7 +178,7 @@ class TimeSeries(object):
         
         Parameters:
         -----------
-        root : float
+        root : int or float
             Value of a new root (in seconds)
             
         Example:
@@ -181,14 +186,20 @@ class TimeSeries(object):
         y.add_root(66.6) -- adds a root to the 66.6th second
         y -- instance of the TimeSeries class
         """
-        if self.settings['clip_start'] & self.settings['clip_end']:
-            assert (root < self.settings['clip_start']) | (root > self.settings['clip_end']), \
-            'New root value cannot be within the clipped data interval'
+        def check_root(root):
+            if (root < self._t[0]) or (root > self._t[-1]):
+                raise Exception('A new root value should be between {} and {} sec'.format(self._t[0], self._t[-1]))
+            if (root > self.settings['clip_start']) and (root < self.settings['clip_end']):
+                raise Exception('A new root value cannot be within the clipped data interval')
+        
+        check_root(root)
         self.roots.add(root)
         self._calculate_results()
         self.labels = self._get_interval_labels()
         
     def _get_interval_labels(self):
+        """ Classifies each inter-root interval to 'dilation' or 'constriction'
+        """
         return ['dilation' if abs(y_max-self.baseline_mean) > abs(y_min-self.baseline_mean) else 'constriction' \
                 for y_max, y_min in zip(self._results['max_value'], self._results['min_value'])]
         
@@ -200,9 +211,11 @@ class TimeSeries(object):
                            if np.isfinite(d.iloc[i]) & (d.iloc[i] != 0))    
         
     def _calculate_results(self):
+        """  Calculates all the parameters of interest from each inter-root interval
+        """
         self._results = defaultdict(list)
         funcs = dict(max=(np.argmax, np.max), min=(np.argmin, np.min))
-        for t1, t2 in self._root_zip:
+        for t1, t2 in self._zip_roots():
             y = self._sel(t1, t2)
             if (t2 - t1 >= self.settings['duration_threshold']) & (max(abs(y)) >= self.settings['intensity_threshold']): 
                 self._results['mean'].append(np.mean(y))
@@ -215,9 +228,8 @@ class TimeSeries(object):
                     self._results[extrema_type+'_time_to_peak'].append(self._results[extrema_type+'_time'][-1] - self.settings['t_start'])
                     self._results[extrema_type+'_time_to_peak_from_root'].append(self._results[extrema_type+'_time'][-1] - t1)   
             else: 
-                for k in params:
+                for k in Params:
                     self._results[k].append(np.nan)
-                
             
     def get_results(self):
         """ Outputs results as an excel-like table (pandas.DataFrame)
@@ -227,9 +239,9 @@ class TimeSeries(object):
         y.get_results(); y -- instance of the TimeSeries class 
         """
         
-        times = ['{0:.1f} to {1:.1f} sec'.format(t1, t2) for t1, t2 in self._root_zip]
-        indexes = [(i, j, k) for i, j in zip(self.labels, times) for k in params]
-        return pd.DataFrame(data=np.vstack([self._results[i] for i in params]).T.ravel(), 
+        times = ['{0:.1f} to {1:.1f} sec'.format(t1, t2) for t1, t2 in self._zip_roots()]
+        indexes = [(i, j, k) for i, j in zip(self.labels, times) for k in Params]
+        return pd.DataFrame(data=np.vstack([self._results[i] for i in Params]).T.ravel(), 
                             index=pd.MultiIndex.from_tuples(indexes, names=['label', 'time', 'parameter']), 
                             columns=(self.name + ' (' + self.roi_type + ')',))
     
