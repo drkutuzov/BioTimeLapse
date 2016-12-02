@@ -133,9 +133,6 @@ class TimeSeries(object):
     
     def _sel(self, t_start, t_end):
         return self._y.loc[slice(t_start, t_end)]
-    
-    def _zip_roots(self):
-        return zip(self.roots[:-1], self.roots[1:])
         
     def _clip(self):
         if self.settings['clip_start'] & self.settings['clip_end']:
@@ -217,7 +214,7 @@ class TimeSeries(object):
         """
         self._results = defaultdict(list)
         funcs = dict(max=(np.argmax, np.max), min=(np.argmin, np.min))
-        for t1, t2 in self._zip_roots():
+        for t1, t2 in zip(self.roots, self.roots[1:]):
             y = self._sel(t1, t2)
             if (t2 - t1 >= self.settings['duration_threshold']) & (max(abs(y)) >= self.settings['intensity_threshold']): 
                 self._results['mean'].append(np.mean(y))
@@ -241,7 +238,7 @@ class TimeSeries(object):
         y.get_results(); y -- instance of the TimeSeries class 
         """
         
-        times = ['{0:.1f} to {1:.1f} sec'.format(t1, t2) for t1, t2 in self._zip_roots()]
+        times = ['{0:.1f} to {1:.1f} sec'.format(t1, t2) for t1, t2 in zip(self.roots, self.roots[1:])]
         indexes = [(i, j, k) for i, j in zip(self.labels, times) for k in Params]
         return pd.DataFrame(data=np.vstack([self._results[i] for i in Params]).T.ravel(), 
                             index=pd.MultiIndex.from_tuples(indexes, names=['label', 'time', 'parameter']), 
