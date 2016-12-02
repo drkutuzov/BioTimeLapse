@@ -2,6 +2,7 @@ from collections import defaultdict
 from sortedcontainers import SortedSet
 from scipy.signal import savgol_filter
 from sklearn.metrics import auc
+import editdistance as ed
 import pandas as pd
 import numpy as np
 import pylab as plt
@@ -81,7 +82,7 @@ class TimeSeries(object):
         self._y = pd.Series(savgol_filter(self._y, self.settings['smooth_width'], self.settings['smooth_order']), 
                             index=self._t)
         self._clip()
-        self.roots = self._find_roots() if roots is None else roots
+        self.roots = self._find_roots() if roots is None else SortedSet(roots)
         if self.settings['first_root_init']:
             self.roots.add(self.settings['t_start'])
         if self.settings['last_root_init']:
@@ -111,7 +112,8 @@ class TimeSeries(object):
         result = dict(defaults)
         for k, v in settings.iteritems():
             if k not in result:
-                raise Exception('Unknown settings option {}, available options are:\n'.format(k) + '\n'.join(defaults.keys()))
+                candidates = sorted([(word, ed.eval(word, k)) for word in defaults.keys()], key=lambda x: x[1])
+                raise Exception('Unknown settings option {}, maybe you meant: {} \n\nAll available parameters are:\n'.format(k, candidates[0][0]) + ', '.join(defaults.keys()))
             result[k] = v                      
         self.settings = result
     
