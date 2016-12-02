@@ -2,7 +2,6 @@ from collections import defaultdict
 from sortedcontainers import SortedSet
 from scipy.signal import savgol_filter
 from sklearn.metrics import auc
-import editdistance as ed
 import pandas as pd
 import numpy as np
 import pylab as plt
@@ -112,7 +111,7 @@ class TimeSeries(object):
         result = dict(defaults)
         for k, v in settings.iteritems():
             if k not in result:
-                candidates = sorted([(word, ed.eval(word, k)) for word in defaults.keys()], key=lambda x: x[1])
+                candidates = sorted([(word, levenshtein(word, k)) for word in defaults.keys()], key=lambda x: x[1])
                 raise Exception('Unknown settings option {}, maybe you meant: {} \n\nAll available parameters are:\n'.format(k, candidates[0][0]) + ', '.join(defaults.keys()))
             result[k] = v                      
         self.settings = result
@@ -216,7 +215,7 @@ class TimeSeries(object):
         funcs = dict(max=(np.argmax, np.max), min=(np.argmin, np.min))
         for t1, t2 in zip(self.roots, self.roots[1:]):
             y = self._sel(t1, t2)
-            if (t2 - t1 >= self.settings['duration_threshold']) & (max(abs(y)) >= self.settings['intensity_threshold']): 
+            if (t2 - t1 >= self.settings['duration_threshold']) and (max(abs(y)) >= self.settings['intensity_threshold']): 
                 self._results['mean'].append(np.mean(y))
                 area_plus, area_minus = self._area_under_curve(t1, t2)
                 self._results['auc_plus'].append(area_plus)
@@ -320,3 +319,19 @@ def analyze_table(table, settings, roots, labels, filename):
     writer2 = pd.ExcelWriter(filename + '_STD.xlsx', engine='xlsxwriter')
     pd.concat(result_std, axis=1).to_excel(writer2, sheet_name='STD')
     writer2.save() 
+    
+    
+def levenshtein(s1, s2):
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+
+    distances = range(len(s1) + 1)
+    for i2, c2 in enumerate(s2):
+        distances_ = [i2+1]
+        for i1, c1 in enumerate(s1):
+            if c1 == c2:
+                distances_.append(distances[i1])
+            else:
+                distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+        distances = distances_
+    return distances[-1]
