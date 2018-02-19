@@ -111,8 +111,7 @@ class TimeSeries(object):
         result = dict(defaults)
         for k, v in settings.iteritems():
             if k not in result:
-                candidates = sorted([(word, levenshtein(word, k)) for word in defaults.keys()], key=lambda x: x[1])
-                raise Exception('Unknown settings option {}, maybe you meant: {} \n\nAll available parameters are:\n'.format(k, candidates[0][0]) + ', '.join(defaults.keys()))
+                raise Exception('Unknown settings option {}\nAll available parameters are:\n'.format(k) + ', '.join(defaults.keys()))
             result[k] = v                      
         self.settings = result
     
@@ -319,19 +318,3 @@ def analyze_table(table, settings, roots, labels, filename):
     writer2 = pd.ExcelWriter(filename + '_STD.xlsx', engine='xlsxwriter')
     pd.concat(result_std, axis=1).to_excel(writer2, sheet_name='STD')
     writer2.save() 
-    
-    
-def levenshtein(s1, s2):
-    if len(s1) > len(s2):
-        s1, s2 = s2, s1
-
-    distances = range(len(s1) + 1)
-    for i2, c2 in enumerate(s2):
-        distances_ = [i2+1]
-        for i1, c1 in enumerate(s1):
-            if c1 == c2:
-                distances_.append(distances[i1])
-            else:
-                distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
-        distances = distances_
-    return distances[-1]
