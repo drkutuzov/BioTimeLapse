@@ -109,7 +109,7 @@ class TimeSeries(object):
                     }
         
         result = dict(defaults)
-        for k, v in settings.iteritems():
+        for k, v in settings.items():
             if k not in result:
                 raise Exception('Unknown settings option {}\nAll available parameters are:\n'.format(k) + ', '.join(defaults.keys()))
             result[k] = v                      
@@ -219,7 +219,7 @@ class TimeSeries(object):
                 area_plus, area_minus = self._area_under_curve(t1, t2)
                 self._results['auc_plus'].append(area_plus)
                 self._results['auc_minus'].append(area_minus)
-                for extrema_type, f in funcs.iteritems():
+                for extrema_type, f in funcs.items():
                     self._results[extrema_type+'_time'].append(f[0](y))
                     self._results[extrema_type+'_value'].append(f[1](y))
                     self._results[extrema_type+'_time_to_peak'].append(self._results[extrema_type+'_time'][-1] - self.settings['t_start'])
